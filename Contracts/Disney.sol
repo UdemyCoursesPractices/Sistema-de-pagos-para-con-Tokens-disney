@@ -49,7 +49,7 @@ contract Disney{
         require(_numTokens <= Balance, "Compra un numero menor de Tokens");
         token.transfer(msg.sender, _numTokens);
         //Almacenar en un registro los tokens comprados.
-        Clientes[msg.sender].tokens_comprados = _numTokens;
+        Clientes[msg.sender].tokens_comprados += _numTokens;
 
     } 
     function balanceOF() public view returns(uint){
@@ -66,7 +66,7 @@ contract Disney{
     }
     
     //Funcion para generar mas tokens.
-    function generaTokens(uint _numTokens) public unicomente(msg.sender){
+    function generaTokens(uint _numTokens) public unicamente(msg.sender){
         token.increaseTotalSupply(_numTokens);
     }
     
@@ -74,8 +74,99 @@ contract Disney{
    
     
     //Modificador para controlar las funciones ejecutables por disney
-    modifier unicomente(address _direccion){
+    modifier unicamente(address _direccion){
         require(_direccion == owner, "No tienes permiso");
         _;
     }
+    
+    //Events
+    
+    event disfruta_atraccion(string);
+    event nueva_atraccion(string, uint);
+    event baja_atraccion(string);
+    
+    //struct de las atracciones_utilzadas
+    struct atraccion{
+        string nombre_atraccion;
+        uint precio_atraccion;
+        bool estado_atraccion;
+    }
+    
+    //mapping nombre con una estructura de datos de la atraccion.
+    mapping(string => atraccion) public MappingAtracciones;
+    
+    
+    //array para almacenar el nombre de las atracciones.
+    string[] Atracciones;
+    
+    //mapping para relacionar una identidad (Cliente) con su historial en DISNEY
+    mapping(address => string[]) HistorialAtracciones;
+    
+    //Hombre araña -> 8 Tokens
+    //Toy Story -> 1 Tokens
+    //StarWars -> 5 tokens
+    
+    //Crea nuevas atracciones para DISNEY. Solo es ejecutable para DISNEY (unicamente modifier)
+    function nuevaAtraccion(string memory _nombreAtraccion, uint _precio) public unicamente(msg.sender){
+        //Creacion de una atraccion en DISNEY
+        MappingAtracciones[_nombreAtraccion] = atraccion(_nombreAtraccion, _precio, true);
+        //almacenar en el arraiy las Atracciones
+        Atracciones.push(_nombreAtraccion);
+        //Emision evento nuevaAtraccion
+        emit nueva_atraccion(_nombreAtraccion, _precio);
+    }
+    
+    //Dar de baja atracciones
+    function BajaAtraccion (string memory _nombreAtraccion) public unicamente(msg.sender){
+        //mover el bool del struct atracciones a falso
+    
+        MappingAtracciones[_nombreAtraccion].estado_atraccion = false;
+        //evento de BajaAtra
+        emit baja_atraccion(_nombreAtraccion);
+    }
+    
+    //Visualizar las atracciones de Disney.
+    function AtraccionesDisponibles() public view returns(string[] memory){
+        return Atracciones;
+    }
+    
+    
+    //Funcion que permite a un cliente pagar la atraccion.
+    function SubirseAtraccion(string memory _nombreAtraccion) public {
+        //precio de la atracion (en tokens)
+        uint tokens_atraccion = MappingAtracciones[_nombreAtraccion].precio_atraccion;
+        //verifica el estado de la atracion (si esta disponible para su uso)
+        require(MappingAtracciones[_nombreAtraccion].estado_atraccion == true, "NO esta en uso esta atraccion");
+        //Verifique el numero de tokens que tiene el cliente.
+        require(tokens_atraccion <= misTokens(), "Necesitas mas tokens para subirte a esta atraccion");
+        
+        /*El cliente paga la atraccion.
+            -Ha sido necesario crear una function en ERC20.sol con el nombre "transferencia_Disney" debido a que en caso de usar el transfer o transfer from
+            se generaba un conflicto con las direcciones de swap.. ya que el msg.sender que recibia el metodo Transfer o TransferFrom era la direccion del contrato Disney.sol.
+        */
+        
+       token.transferencia_Disney(msg.sender, address(this), tokens_atraccion);
+       //Almacenar el historial del cliente en el MappingAtracciones
+       HistorialAtracciones[msg.sender].push(_nombreAtraccion);
+       emit disfruta_atraccion(_nombreAtraccion);
+    } 
+    
+    //Visualizar el historial dcompleto de atracciones disfrutadas por un cliente
+    function Historial()public view returns(string [] memory){
+        return HistorialAtracciones[msg.sender];
+    }
+    
+    //Funcion para que un cliente pueda cambiar tokens por su valor en eth.
+    function DevolverTokens(uint _numTokens) public payable{
+        //El numero de tokes a devolver esta en la cartera del cliente.
+        require(_numTokens > 0, "necesario regresar una cantidad positiva de tokens");
+        require(_numTokens <= misTokens(), "No tienes los tokens que deseas devolver");
+        
+        //El cliente devulve los tokens
+        token.transferencia_Disney(msg.sender, address(this), _numTokens);
+        //Disney regresa los eth
+        msg.sender.transfer(PrecioTokens(_numTokens));
+        
+    }
 }
+
